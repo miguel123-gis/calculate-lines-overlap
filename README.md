@@ -1,4 +1,4 @@
-# Measure route overlap script in QGIS
+# Measure route overlap processing plugin in QGIS
 This script measures the overlap between two lines by clipping the overlap and returning a line layer with a length field. It first snaps the two lines, clips the overlap, dissolves it, and adds a length field in meters.
 
 There is no native tool that does this in QGIS if I'm not mistaken.
@@ -6,10 +6,10 @@ There is no native tool that does this in QGIS if I'm not mistaken.
 The tool is NOT made from scratch and can be made using the Graphical Modeler. However, this script was tweaked a bit to organize the forms and add more functionality soon.
 
 ### 1. Situation
-This started from a task at work that required measuring the overlap between two transport routes. I didn't find any tool that did this and the only way to do it was to manually measure. I made a short PyQGIS script and then converted into a processing script later on.
+This started from a task at work that required measuring the overlap between two transport routes. I didn't find any tool that did this and the only way to do it was to manually measure. I made a short PyQGIS script and then converted into a processing plugin later on.
 ![image](https://user-images.githubusercontent.com/63440740/119226802-8e50ef00-bb3d-11eb-9f4b-eb243b384e8a.png)
 
-### 2. Screenshot of the processing script
+### 2. Screenshot of the processing plugin
 ![image](https://user-images.githubusercontent.com/63440740/119226872-d3752100-bb3d-11eb-8712-7f7441af9a35.png)
 
 ### 3. Result layer
