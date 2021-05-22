@@ -1,0 +1,190 @@
+# -*- coding: utf-8 -*-
+
+"""
+***************************************************************************
+*                                                                         *
+*   This program is free software; you can redistribute it and/or modify  *
+*   it under the terms of the GNU General Public License as published by  *
+*   the Free Software Foundation; either version 2 of the License, or     *
+*   (at your option) any later version.                                   *
+*                                                                         *
+***************************************************************************
+"""
+
+from qgis.PyQt.QtCore import QCoreApplication
+from qgis.core import (QgsProcessing,
+                       QgsFeatureSink,
+                       QgsProcessingException,
+                       QgsProcessingAlgorithm,
+                       QgsProcessingParameterFeatureSource,
+                       QgsProcessingParameterFeatureSink,
+                       QgsProcessingParameterVectorLayer,
+                       QgsProcessingParameterNumber,
+                       QgsProcessingMultiStepFeedback)
+from qgis import processing
+
+class MeasureLineOverlap(QgsProcessingAlgorithm):
+    """
+    This is an algorithm that measures the overlap between two lines.
+
+    All Processing algorithms should extend the QgsProcessingAlgorithm
+    class.
+    """
+
+    # Constants used to refer to parameters and outputs. They will be
+    # used when calling the algorithm from another algorithm, or when
+    # calling from the QGIS console.
+
+    INPUT1 = 'INPUT1'
+    INPUT2 = 'INPUT2'
+
+    def tr(self, string):
+        """
+        Returns a translatable string with the self.tr() function.
+        """
+        return QCoreApplication.translate('Procesing', string)
+
+    def createInstance(self):
+        return MeasureLineOverlap()
+
+    def name(self):
+        """
+        Returns the algorithm name, used for identifying the algorithm. This
+        string should be fixed for the algorithm, and must not be localised.
+        The name should be unique within each provider. Names should contain
+        lowercase alphanumeric characters only and no spaces or other
+        formatting characters.
+        """
+        return 'measure-line-overlap_v4'
+
+    def displayName(self):
+        """
+        Returns the translated algorithm name, which should be used for any
+        user-visible display of the algorithm name.
+        """
+        return self.tr('Measure line overlap v4')
+
+    def shortHelpString(self):
+        """
+        Returns a localised short helper string for the algorithm. This string
+        should provide a basic description about what the algorithm does and the
+        parameters and outputs associated with it..
+        """
+        return self.tr("Measures the overlap between two lines in meters" + "\n" +
+                        "Available snapping behaviors:" + "\n" +
+                        "0 — Prefer aligning nodes, insert extra vertices where required" + "\n" +
+                        "1 — Prefer closest point, insert extra vertices where required" + "\n" +
+                        "2 — Prefer aligning nodes, don’t insert new vertices" + "\n" +
+                        "3 — Prefer closest point, don’t insert new vertices" + "\n" +
+                        "4 — Move end points only, prefer aligning nodes" + "\n" +
+                        "5 — Move end points only, prefer closest point" + "\n" +
+                        "6 — Snap end points to end points only" + "\n" +
+                        "7 — Snap to anchor nodes (single layer only)")
+
+    def initAlgorithm(self, config=None):
+        """
+        Here we define the inputs and output of the algorithm, along
+        with some other properties.
+        """
+
+        # We add the input vector features source. It can have any kind of
+        # geometry.
+
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.INPUT1,
+                self.tr('Line 1 or the obviously shorter route'),
+                [QgsProcessing.TypeVectorLine]
+            )
+        )
+        
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.INPUT2,
+                self.tr('Line 2 (reference layer) or the line where Line 1 will be snapped on to'),
+                [QgsProcessing.TypeVectorLine]
+            )
+        )
+
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                'behavior', 'Snapping behavior', type=QgsProcessingParameterNumber.Integer, 
+                minValue=0, maxValue=7, defaultValue=0))
+    
+        self.addParameter(
+            QgsProcessingParameterNumber(
+                'snappingtolerance', 'Snapping tolerance' + '\n' +
+                                     'or how close input vertices need to be to the reference layer geometries before they are snapped', 
+                                     # 1st is parameter name, 2nd is the name in the function
+                type=QgsProcessingParameterNumber.Integer, defaultValue=20))
+
+        self.addParameter(QgsProcessingParameterFeatureSink(
+            'MeasuredOverlap', 'Measured overlap', 
+            type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True, defaultValue=None))
+
+
+    def processAlgorithm(self, parameters, context, feedback):
+        feedback = QgsProcessingMultiStepFeedback(4, feedback)
+        results = {}
+        outputs = {}
+        
+        # Snap geometries to layer
+        alg_params = {
+            'BEHAVIOR': parameters['behavior'],
+            'INPUT': parameters['INPUT1'],
+            'REFERENCE_LAYER': parameters['INPUT2'],
+            'TOLERANCE': parameters['snappingtolerance'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['SnappedLine'] = processing.run('qgis:snapgeometries', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        
+        feedback.setCurrentStep(1)
+        if feedback.isCanceled():
+            return {}
+            
+        # Clip shorter route from longer route (reference layer)    
+        alg_params = {
+            'INPUT': parameters['INPUT2'],
+            'OVERLAY': outputs['SnappedLine']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['ClippedOverlap'] = processing.run('native:clip', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        
+        feedback.setCurrentStep(2)
+        if feedback.isCanceled():
+            return {}
+            
+        # Dissolve overlap
+        alg_params = {
+            'FIELD': None,
+            'INPUT': outputs['ClippedOverlap']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['DissolveOverlap'] = processing.run('native:dissolve', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        
+        feedback.setCurrentStep(3)
+        if feedback.isCanceled():
+            return {}
+        
+        #measure
+        alg_params = {
+            'CALC_METHOD': 0,
+            'INPUT': outputs['DissolveOverlap']['OUTPUT'],
+            'OUTPUT': parameters['MeasuredOverlap']
+        }
+        results['MeasuredOverlap'] = processing.run('qgis:exportaddgeometrycolumns', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        return results      
+        
+        
+"""
+To do as of 10 May 2021
+[ ] 1. Automate detection of the longer route and its assignment as the reference layer
+[ ] 2. Check if the overlap can be measured without dissolve
+[ ] 3. The resulting layer should be named 'Overlap between [name of line 1] and [name of line 2]
+[ ] 4. Basically, the result of the script should be the 
+[X]      a. overlap line layer with length_m field 
+[ ]      b. a csv with the fields of the length of line 1, line 2, the overlap,
+            percentage of the overlap vs line 1, and percentage of the overlap vs line 2
+[ ] 5. Apply old script to this script
+"""
+        
