@@ -20,6 +20,6 @@ Notice that the resulting layer is snapped completely to the reference layer. Sn
 ![image](https://user-images.githubusercontent.com/63440740/119226923-1df69d80-bb3e-11eb-9d25-570b069dfd1b.png)
 
 ### 5. Improvements needed
-1. The resulting layer should be named as `Overlap between line 1 and line 2`" instead of `Added geom info`,
+1. The resulting layer should be named as "Overlap between `name of line 1` and `name of line 2`" instead of "Added geom info",
 2. the default `length` field should be named `length_km` and divide the value with 1000 to get the length in kilometers,
 3. and add two fields named `ovp_perc1` and `ovp_perc2` which shows the overlap in percentage versus line 1 and line 2, respectively.
