@@ -20,8 +20,17 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterFeatureSink,
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterNumber,
-                       QgsProcessingMultiStepFeedback)
+                       QgsProcessingMultiStepFeedback,
+                       QgsProcessingLayerPostProcessorInterface)
 from qgis import processing
+
+class Renamer (QgsProcessingLayerPostProcessorInterface):
+    def __init__(self, layer_name):
+        self.name = layer_name
+        super().__init__()
+        
+    def postProcessLayer(self, layer, context, feedback):
+        layer.setName(self.name)
 
 class MeasureLineOverlap(QgsProcessingAlgorithm):
     """
@@ -33,7 +42,7 @@ class MeasureLineOverlap(QgsProcessingAlgorithm):
 
     # Constants used to refer to parameters and outputs. They will be
     # used when calling the algorithm from another algorithm, or when
-    # calling from the QGIS console
+    # calling from the QGIS console.
 
     INPUT1 = 'INPUT1'
     INPUT2 = 'INPUT2'
@@ -173,18 +182,9 @@ class MeasureLineOverlap(QgsProcessingAlgorithm):
             'OUTPUT': parameters['MeasuredOverlap']
         }
         results['MeasuredOverlap'] = processing.run('qgis:exportaddgeometrycolumns', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
-        return results      
         
+        global renamer
+        renamer = Renamer('Overlap of line1 and line2')
+        context.layerToLoadOnCompletionDetails(results['MeasuredOverlap']['OUTPUT']).setPostProcessor(renamer)
         
-"""
-To do as of 10 May 2021
-[ ] 1. Automate detection of the longer route and its assignment as the reference layer
-[ ] 2. Check if the overlap can be measured without dissolve
-[ ] 3. The resulting layer should be named 'Overlap between [name of line 1] and [name of line 2]
-[ ] 4. Basically, the result of the script should be the 
-[X]      a. overlap line layer with length_m field 
-[ ]      b. a csv with the fields of the length of line 1, line 2, the overlap,
-            percentage of the overlap vs line 1, and percentage of the overlap vs line 2
-[ ] 5. Apply old script to this script
-"""
-        
+        return results     
